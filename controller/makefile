@@ -2,7 +2,7 @@
 MCU=atmega32u2 # Target is a Minimus 32
 F_CPU=2000000
 OBJECTS=main.o
-TARGET=blink
+TARGET=program
 CFLAGS=-g -Os -Wall -mcall-prologues -mmcu=$(MCU) -DF_CPU=$(F_CPU)
 CC=avr-gcc
 
