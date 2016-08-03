@@ -1,9 +1,8 @@
-#MCU=at90usb162 # Target is a Minimus
-MCU=atmega32u2 # Target is a Minimus 32
+MCU=atmega32u2
 F_CPU=2000000
 OBJECTS=main.o
 TARGET=program
-CFLAGS=-g -Os -Wall -mcall-prologues -mmcu=$(MCU) -DF_CPU=$(F_CPU)
+CFLAGS=-g -std=c99 -Os -Wall -mcall-prologues -mmcu=$(MCU) -DF_CPU=$(F_CPU)
 CC=avr-gcc
 
 all : $(TARGET).hex
