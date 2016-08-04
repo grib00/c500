@@ -1,10 +1,13 @@
 #include <avr/io.h>
 #include <util/delay.h>
 
-#define NOTE_OFF 0x80
-#define NOTE_ON 0x90
+#define PD_ENCODER_0 PD0
+#define PD_ENCODER_1 PD1
+#define PD_LED_BLUE PD5
+#define PD_LED_RED PD6
+#define PD_SWITCH PD7
 
-#define CHANNEL_OUT 0
+// ========== Serial I/O ==========
 
 inline void serial_init()  {
 	// Sets baud rate
@@ -22,56 +25,94 @@ inline void serial_put(uint8_t byte)  {
 	UDR1 = byte; // Sends out the byte value
 }
 
+// ========== Encoders ==========
+
+static uint8_t state_up = 3;
+static uint8_t state_down = 3;
+static uint8_t next_state_up[4] = {2, 0, 3, 1}; // sequence 3102
+static uint8_t next_state_down[4] = {1, 3, 0, 2}; // sequence 3201
+
+static int8_t encoder_value = 0;
+
+void do_encoder() {
+	uint8_t in = PIND & ((1 << PD_ENCODER_0) | (1 << PD_ENCODER_1));
+	if (in != state_up) {
+		uint8_t next = next_state_up[state_up];
+		if (in == next) {
+			if (state_up == 0) {
+				encoder_value++;
+			}
+			state_up = in;
+		} else if (in == 3) {
+			state_up = in;
+		}
+	}
+	if (in != state_down) {
+		uint8_t next = next_state_down[state_down];
+		if (in == next) {
+			if (state_down == 0) {
+				encoder_value--;
+			}
+			state_down = in;
+		} else if (in == 3) {
+			state_down = in;
+		}
+	}
+}
+
+// ========== MIDI functions ==========
+
+#define NOTE_OFF 0x80
+#define NOTE_ON 0x90
+#define CHANNEL_OUT 0
+
 #define midi_out serial_put
 
 void play_note(uint8_t note) {
 	midi_out(NOTE_ON | CHANNEL_OUT);
 	midi_out(note);
 	midi_out(64);
-	_delay_ms(100);
+	// _delay_ms(100);
+	for (uint16_t i = 0; i < 10000; i++) {
+		do_encoder();
+	}
 	midi_out(note);
 	midi_out(0);
 }
 
-#define tune_size 18
-static uint8_t tune[tune_size] = {
-	65, 67, 56, 32, 70, 71, 48, 66, 62, 35,
-	70, 66, 48, 65, 70, 64, 70, 47
-};
+#define tune_size 4
+static uint8_t tune[tune_size] = { 65, 67, 69, 70 };
 
 void play_tune() {
-	for (;;) {
-		PORTD ^= (1 << PD5);
-		for (int i = 0; i < tune_size; i++) {
-			PORTD ^= (1 << PD6);
-			play_note(tune[i]);
+	uint8_t i = 0;
+	while(1) {
+		PORTD ^= (1 << PD_LED_RED);
+		play_note(tune[i] + encoder_value);
+		i++;
+		if (i >= tune_size) {
+			i = 0;
+			PORTD ^= (1 << PD_LED_BLUE);
 		}
 	}
 }
 
-int main(void) {
+// ========== Main ==========
 
-	// ========== Set-up ==========
+int main(void) {
 
 	serial_init();
 
-	DDRD = (1 << PD6) | (1 << PD5); // LED Ports are in output mode
-	PORTD = (1 << PD7); // Enables pull-up on PD7
-	PORTD ^= (1 << PD5);
+	DDRD = (1 << PD_LED_BLUE) | (1 << PD_LED_RED); // LED Ports are in output mode
+	PORTD = (1 << PD_SWITCH) | (1 << PD_ENCODER_1) |  (1 << PD_ENCODER_0); // Enables pull-up on inputs
 
-	// ========== Loop ==========
+	PORTD ^= (1 << PD_LED_RED); // switch off both LEDs
+	PORTD ^= (1 << PD_LED_BLUE);
 
-	while (1) {
+	PORTD ^= (1 << PD_LED_BLUE);
+	_delay_ms(1000);
+	PORTD ^= (1 << PD_LED_BLUE);
 
-		// serial_put(0);
-		// serial_put(0xFF);
-		// serial_put(0b10101010);
-		// _delay_ms(0.5);
-		// if (PIND & (1 << PD7)) _delay_ms(1000);
-		// else _delay_ms(250); // blink faster when button pressed
-
-		play_tune();
-	}
+	play_tune();
 
 	return 0;
 }
