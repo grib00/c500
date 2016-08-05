@@ -13,21 +13,20 @@
 #define SERIAL_OUT_READY (UCSR1A & (1 << UDRE1))
 #define SERIAL_IN UDR1
 #define SERIAL_OUT UDR1
+#define SERIAL_BAUDRATE 31250
+#define SERIAL_BAUD_PRESCALE (((F_CPU / (SERIAL_BAUDRATE * 16UL))) - 1)
 
 inline void serial_init()  {
 	// Sets baud rate
-#define USART_BAUDRATE 31250
-#define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
-	UBRR1H = (unsigned char) (BAUD_PRESCALE >> 8);
-	UBRR1L = (unsigned char) BAUD_PRESCALE;
+	UBRR1H = (unsigned char) (SERIAL_BAUD_PRESCALE >> 8);
+	UBRR1L = (unsigned char) SERIAL_BAUD_PRESCALE;
 	// Turns on the transmission and reception circuitry
 	UCSR1B = (1 << RXEN1) | (1 << TXEN1);
-	// UCSR1C = (1 << UCSZ11) | (1 << UCSZ10);
 }
 
 inline void serial_put(uint8_t byte)  {
-	while (!SERIAL_OUT_READY); // Waits until transmit is ready
-	SERIAL_OUT = byte; // Sends out the byte value
+	while (!SERIAL_OUT_READY);
+	SERIAL_OUT = byte;
 }
 
 // ========== Encoders ==========
@@ -39,7 +38,7 @@ static uint8_t next_state_down[4] = {1, 3, 0, 2}; // sequence 3201
 
 static int8_t encoder_value = 0;
 
-void do_encoder() {
+void scan_encoder() {
 	uint8_t in = PIND & ((1 << PD_ENCODER_0) | (1 << PD_ENCODER_1));
 	if (in != state_up) {
 		uint8_t next = next_state_up[state_up];
@@ -79,7 +78,7 @@ void play_note(uint8_t note) {
 	midi_out(64);
 	// _delay_ms(100);
 	for (uint16_t i = 0; i < 10000; i++) {
-		do_encoder();
+		scan_encoder();
 	}
 	midi_out(note);
 	midi_out(0);
@@ -104,14 +103,11 @@ void play_tune() {
 // ========== Main ==========
 
 int main(void) {
-	_delay_ms(1000);
-
 	DDRD = (1 << PD_LED_BLUE) | (1 << PD_LED_RED); // LED Ports are in output mode
 	PORTD = (1 << PD_SWITCH) | (1 << PD_ENCODER_1) |  (1 << PD_ENCODER_0); // Enables pull-up on inputs
-
 	serial_init();
-
 	PORTD ^= (1 << PD_LED_RED); // switch off both LEDs
+	PORTD ^= (1 << PD_LED_BLUE);
 
 	while (1) {
 		if (SERIAL_IN_READY) {
