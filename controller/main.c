@@ -9,6 +9,11 @@
 
 // ========== Serial I/O ==========
 
+#define SERIAL_IN_READY (UCSR1A & (1 << RXC1))
+#define SERIAL_OUT_READY (UCSR1A & (1 << UDRE1))
+#define SERIAL_IN UDR1
+#define SERIAL_OUT UDR1
+
 inline void serial_init()  {
 	// Sets baud rate
 #define USART_BAUDRATE 31250
@@ -16,13 +21,13 @@ inline void serial_init()  {
 	UBRR1H = (unsigned char) (BAUD_PRESCALE >> 8);
 	UBRR1L = (unsigned char) BAUD_PRESCALE;
 	// Turns on the transmission and reception circuitry
-	UCSR1B = /*(1 << RXEN1) |*/ (1 << TXEN1);
+	UCSR1B = (1 << RXEN1) | (1 << TXEN1);
 	// UCSR1C = (1 << UCSZ11) | (1 << UCSZ10);
 }
 
 inline void serial_put(uint8_t byte)  {
-	while ((UCSR1A & (1 << UDRE1)) == 0); // Waits until UDR is ready
-	UDR1 = byte; // Sends out the byte value
+	while (!SERIAL_OUT_READY); // Waits until transmit is ready
+	SERIAL_OUT = byte; // Sends out the byte value
 }
 
 // ========== Encoders ==========
@@ -99,20 +104,24 @@ void play_tune() {
 // ========== Main ==========
 
 int main(void) {
-
-	serial_init();
+	_delay_ms(1000);
 
 	DDRD = (1 << PD_LED_BLUE) | (1 << PD_LED_RED); // LED Ports are in output mode
 	PORTD = (1 << PD_SWITCH) | (1 << PD_ENCODER_1) |  (1 << PD_ENCODER_0); // Enables pull-up on inputs
 
+	serial_init();
+
 	PORTD ^= (1 << PD_LED_RED); // switch off both LEDs
-	PORTD ^= (1 << PD_LED_BLUE);
 
-	PORTD ^= (1 << PD_LED_BLUE);
-	_delay_ms(1000);
-	PORTD ^= (1 << PD_LED_BLUE);
-
-	play_tune();
+	while (1) {
+		if (SERIAL_IN_READY) {
+			PORTD ^= (1 << PD_LED_RED);
+			uint8_t byte = SERIAL_IN;
+			while (!SERIAL_OUT_READY);
+			SERIAL_OUT = byte;
+			PORTD ^= (1 << PD_LED_RED);
+		}
+	};
 
 	return 0;
 }
