@@ -36,15 +36,14 @@ static uint8_t state_down = 3;
 static uint8_t next_state_up[4] = {2, 0, 3, 1}; // sequence 3102
 static uint8_t next_state_down[4] = {1, 3, 0, 2}; // sequence 3201
 
-static int8_t encoder_value = 0;
-
-void scan_encoder() {
+int8_t scan_encoder() {
+	int8_t r = 0;
 	uint8_t in = PIND & ((1 << PD_ENCODER_0) | (1 << PD_ENCODER_1));
 	if (in != state_up) {
 		uint8_t next = next_state_up[state_up];
 		if (in == next) {
 			if (state_up == 0) {
-				encoder_value++;
+				r = 1;
 			}
 			state_up = in;
 		} else if (in == 3) {
@@ -55,13 +54,14 @@ void scan_encoder() {
 		uint8_t next = next_state_down[state_down];
 		if (in == next) {
 			if (state_down == 0) {
-				encoder_value--;
+				r = -1;
 			}
 			state_down = in;
 		} else if (in == 3) {
 			state_down = in;
 		}
 	}
+	return r;
 }
 
 // ========== MIDI functions ==========
@@ -72,13 +72,15 @@ void scan_encoder() {
 
 #define midi_out serial_put
 
+static int8_t transpose = 0;
+
 void play_note(uint8_t note) {
 	midi_out(NOTE_ON | CHANNEL_OUT);
 	midi_out(note);
 	midi_out(64);
 	// _delay_ms(100);
 	for (uint16_t i = 0; i < 10000; i++) {
-		scan_encoder();
+		transpose += scan_encoder();
 	}
 	midi_out(note);
 	midi_out(0);
@@ -91,13 +93,30 @@ void play_tune() {
 	uint8_t i = 0;
 	while(1) {
 		PORTD ^= (1 << PD_LED_RED);
-		play_note(tune[i] + encoder_value);
+		play_note(tune[i] + transpose);
 		i++;
 		if (i >= tune_size) {
 			i = 0;
 			PORTD ^= (1 << PD_LED_BLUE);
 		}
 	}
+}
+
+void change_parameter(uint8_t p, uint8_t v) {
+	midi_out(0xF0);
+	midi_out(0x43);
+	midi_out(0x10);
+	midi_out(0x29);
+	midi_out(0x08);
+	midi_out(0x00);
+
+	midi_out(0x00);
+	midi_out(p);
+
+	midi_out(0x00);
+	midi_out(v);
+
+	midi_out(0xF7);
 }
 
 // ========== Main ==========
@@ -117,7 +136,18 @@ int main(void) {
 			SERIAL_OUT = byte;
 			PORTD ^= (1 << PD_LED_RED);
 		}
+		int8_t enc_delta = scan_encoder();
+		if (enc_delta != 0) {
+			if (enc_delta > 0) {
+				PORTD ^= (1 << PD_LED_BLUE);
+				change_parameter(0x09, 0x7F);
+				change_parameter(0x09, 0x00);
+			} else {
+				PORTD ^= (1 << PD_LED_RED);
+				change_parameter(0x08, 0x7F);
+				change_parameter(0x08, 0x00);
+			}
+		}
 	};
-
 	return 0;
 }
